@@ -41,6 +41,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.backoff.BackOffExecution;
 import org.springframework.util.backoff.FixedBackOff;
 
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -76,8 +77,15 @@ public class UserRolesSyncer implements RunnableAgent {
   @Setter
   private long retryIntervalMs;
 
+  @Value("${fiat.polling.enabled:true}")
+  private Boolean pollingEnabled;
+
   public void run() {
-    syncAndReturn();
+    if (pollingEnabled) {
+      syncAndReturn();
+    } else {
+      log.info("Polling for user roles is turned off.");
+    }
   }
 
   public long syncAndReturn() {
@@ -91,6 +99,7 @@ public class UserRolesSyncer implements RunnableAgent {
     }
 
     while (true) {
+      log.info("Polling cycle started - " + new Date());
       try {
         Map<String, UserPermission> combo = new HashMap<>();
         Map<String, UserPermission> temp;
@@ -101,7 +110,9 @@ public class UserRolesSyncer implements RunnableAgent {
           combo.putAll(temp);
         }
 
-        return updateUserPermissions(combo);
+        Long countOfUsersUpdated = updateUserPermissions(combo);
+        log.info("Polling cycle finished - " + new Date());
+        return countOfUsersUpdated;
       } catch (ProviderException|PermissionResolutionException ex) {
         Status status = healthIndicator.health().getStatus();
         long waitTime = backOffExec.nextBackOff();

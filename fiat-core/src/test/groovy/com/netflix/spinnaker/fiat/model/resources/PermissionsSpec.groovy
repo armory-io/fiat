@@ -27,6 +27,8 @@ import org.springframework.context.annotation.Configuration
 import org.springframework.test.context.ContextConfiguration
 import spock.lang.Specification
 
+import java.util.function.Supplier
+
 @ContextConfiguration(classes = TestConfig, initializers = YamlFileApplicationContextInitializer)
 class PermissionsSpec extends Specification {
 
@@ -46,6 +48,15 @@ class PermissionsSpec extends Specification {
   "READ" : [ "foo" ],
   "WRITE" : [ "bar" ]
 }'''
+
+  Supplier<Set<Authorization>> makeSupplier(Collection<Authorization> auths) {
+    return new Supplier<Set<Authorization>>() {
+      @Override
+      Set<Authorization> get() {
+        return auths
+      }
+    }
+  }
 
   def "should deserialize"() {
     when:
@@ -151,21 +162,39 @@ class PermissionsSpec extends Specification {
   def "test getAuthorizations"() {
     setup:
     Permissions p = new Permissions.Builder().build()
+    def unrestrictedAll = makeSupplier(Authorization.ALL)
 
     expect:
-    p.getAuthorizations([]) == [R, W, E] as Set
+    p.getAuthorizations([], unrestrictedAll) == [R, W, E] as Set
 
     when:
     p = Permissions.factory([(R): ["bar"], (W): ["bar"]])
 
     then:
-    p.getAuthorizations(["bar"]) == [R, W] as Set
+    p.getAuthorizations(["bar"], unrestrictedAll) == [R, W] as Set
 
     when:
     p = Permissions.factory([(R): ["bar"]])
 
     then:
-    p.getAuthorizations(["bar", "foo"]) == [R] as Set
+    p.getAuthorizations(["bar", "foo"], unrestrictedAll) == [R] as Set
+  }
+
+  def "test getAuthorization defaults"() {
+    setup:
+    Permissions p = new Permissions.Builder().build()
+
+    when:
+    def unrestrictedAllRead = makeSupplier([R])
+
+    then:
+    p.getAuthorizations([], unrestrictedAllRead) == [R] as Set
+
+    when:
+    unrestrictedAllRead = makeSupplier([W])
+
+    then:
+    p.getAuthorizations([], unrestrictedAllRead) == [W] as Set
   }
 
   def "test config props deserialization"() {

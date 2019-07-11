@@ -23,6 +23,7 @@ import com.google.common.util.concurrent.UncheckedExecutionException;
 import com.netflix.spinnaker.fiat.config.ProviderCacheConfig;
 import com.netflix.spinnaker.fiat.model.resources.Resource;
 import com.netflix.spinnaker.fiat.model.resources.Role;
+import com.netflix.spinnaker.fiat.model.unrestricted.UnrestrictedAuthorizations;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -47,7 +48,15 @@ public abstract class BaseProvider<R extends Resource> implements ResourceProvid
             .filter(resource -> resource instanceof Resource.AccessControlled)
             .map(resource -> (Resource.AccessControlled) resource)
             .filter(resource -> resource.getPermissions().isRestricted())
-            .filter(resource -> resource.getPermissions().isAuthorized(roles) || isAdmin)
+            .filter(
+                resource ->
+                    resource
+                            .getPermissions()
+                            .isAuthorized(
+                                roles,
+                                UnrestrictedAuthorizations.getProvider()
+                                    .getUnrestrictedAuthorizationsSupplier(resource))
+                        || isAdmin)
             .collect(Collectors.toSet());
   }
 

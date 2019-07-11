@@ -20,6 +20,7 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
 import com.netflix.spinnaker.fiat.model.Authorization;
 import java.util.*;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import lombok.EqualsAndHashCode;
 import lombok.ToString;
@@ -65,22 +66,25 @@ public class Permissions {
     return this.permissions.values().stream().anyMatch(groups -> !groups.isEmpty());
   }
 
-  public boolean isAuthorized(Set<Role> userRoles) {
-    return !getAuthorizations(userRoles).isEmpty();
+  public boolean isAuthorized(
+      Set<Role> userRoles, Supplier<Set<Authorization>> unrestrictedAuthorizations) {
+    return !getAuthorizations(userRoles, unrestrictedAuthorizations).isEmpty();
   }
 
   public boolean isEmpty() {
     return permissions.isEmpty();
   }
 
-  public Set<Authorization> getAuthorizations(Set<Role> userRoles) {
+  public Set<Authorization> getAuthorizations(
+      Set<Role> userRoles, Supplier<Set<Authorization>> unrestrictedAuthorizations) {
     val r = userRoles.stream().map(Role::getName).collect(Collectors.toList());
-    return getAuthorizations(r);
+    return getAuthorizations(r, unrestrictedAuthorizations);
   }
 
-  public Set<Authorization> getAuthorizations(List<String> userRoles) {
+  public Set<Authorization> getAuthorizations(
+      List<String> userRoles, Supplier<Set<Authorization>> unrestrictedAuthorizations) {
     if (!isRestricted()) {
-      return Authorization.ALL;
+      return unrestrictedAuthorizations.get();
     }
 
     return this.permissions.entrySet().stream()

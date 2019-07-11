@@ -18,6 +18,7 @@
 package com.netflix.spinnaker.fiat.model.resources;
 
 import com.netflix.spinnaker.fiat.model.Authorization;
+import com.netflix.spinnaker.fiat.model.unrestricted.UnrestrictedAuthorizations;
 import java.util.Set;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -50,7 +51,11 @@ public class BuildService implements Resource.AccessControlled, Viewable {
       if (isAdmin) {
         this.authorizations = Authorization.ALL;
       } else {
-        this.authorizations = buildService.permissions.getAuthorizations(userRoles);
+        this.authorizations =
+            buildService.permissions.getAuthorizations(
+                userRoles,
+                UnrestrictedAuthorizations.getProvider()
+                    .getUnrestrictedAuthorizationsSupplier(buildService));
       }
     }
   }

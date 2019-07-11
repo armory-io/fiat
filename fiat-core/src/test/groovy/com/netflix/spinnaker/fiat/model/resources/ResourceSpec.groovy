@@ -19,6 +19,8 @@ package com.netflix.spinnaker.fiat.model.resources
 import com.netflix.spinnaker.fiat.model.Authorization
 import spock.lang.Specification
 
+import java.util.function.Supplier
+
 class ResourceSpec extends Specification {
 
   def "should parse resource type from Redis key"() {
@@ -55,18 +57,24 @@ class ResourceSpec extends Specification {
     setup:
     def b = new Permissions.Builder().add(Authorization.READ, "role1")
     def p = b.build()
+    def unrestrictedAll = new Supplier() {
+      @Override
+      Object get() {
+        return Authorization.ALL
+      }
+    }
 
     expect:
-    p.getAuthorizations([]).isEmpty()
-    p.getAuthorizations(["role1"]) == [Authorization.READ] as Set
-    p.getAuthorizations(["role1", "role2"]) == [Authorization.READ] as Set
+    p.getAuthorizations([], unrestrictedAll).isEmpty()
+    p.getAuthorizations(["role1"], unrestrictedAll) == [Authorization.READ] as Set
+    p.getAuthorizations(["role1", "role2"], unrestrictedAll) == [Authorization.READ] as Set
 
     when:
     b.add(Authorization.WRITE, "role2")
     p = b.build()
 
     then:
-    p.getAuthorizations(["role1", "role2"]) == [Authorization.READ, Authorization.WRITE] as Set
+    p.getAuthorizations(["role1", "role2"], unrestrictedAll) == [Authorization.READ, Authorization.WRITE] as Set
   }
 
   def "should detect when restricted"() {

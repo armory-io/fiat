@@ -22,7 +22,10 @@ public interface Resource {
   String getName();
 
   @JsonIgnore
-  ResourceType getResourceType();
+  String getResourceType();
+
+  @JsonIgnore
+  String keySuffix();
 
   /** Represents Resources that have restrictions on permissions. */
   interface AccessControlled extends Resource {

@@ -25,11 +25,24 @@ import java.util.Set;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import org.springframework.stereotype.Component;
 
 @Data
+@Component
 @EqualsAndHashCode(callSuper = false)
 public class Application extends BaseAccessControlled<Application> implements Viewable {
-  final ResourceType resourceType = ResourceType.APPLICATION;
+  //  final ResourceType resourceType = ResourceType.APPLICATION;
+
+  public static final String RESOURCE_TYPE = "APPLICATION";
+
+  @Override
+  public String getResourceType() {
+    return RESOURCE_TYPE;
+  }
+
+  public String keySuffix() {
+    return getResourceType().toLowerCase() + "s";
+  }
 
   private String name;
   private Permissions permissions = Permissions.EMPTY;

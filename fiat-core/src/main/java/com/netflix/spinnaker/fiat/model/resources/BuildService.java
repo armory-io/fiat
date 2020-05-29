@@ -22,12 +22,24 @@ import java.util.Set;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import org.springframework.stereotype.Component;
 
 @Data
+@Component
 @EqualsAndHashCode(callSuper = false)
 public class BuildService implements Resource.AccessControlled, Viewable {
 
-  private final ResourceType resourceType = ResourceType.BUILD_SERVICE;
+  //  private final ResourceType resourceType = ResourceType.BUILD_SERVICE;
+  public static final String RESOURCE_TYPE = "BUILD_SERVICE";
+
+  @Override
+  public String getResourceType() {
+    return RESOURCE_TYPE;
+  }
+
+  public String keySuffix() {
+    return getResourceType().toLowerCase() + "s";
+  }
 
   private String name;
   private Permissions permissions = Permissions.EMPTY;

@@ -53,6 +53,8 @@ public class AuthorizeController {
 
   private final Id getUserPermissionCounterId;
 
+  @Autowired ResourceTypeRegistry resourceTypeRegistry;
+
   @Autowired
   public AuthorizeController(
       Registry registry,
@@ -181,22 +183,20 @@ public class AuthorizeController {
       HttpServletResponse response)
       throws IOException {
     Authorization a = Authorization.valueOf(authorization.toUpperCase());
-    ResourceType r = ResourceType.parse(resourceType);
+    //    ResourceType r = ResourceType.parse(resourceType);
+    Resource r = resourceTypeRegistry.parse(resourceType);
     Set<Authorization> authorizations = new HashSet<>(0);
 
     try {
-      switch (r) {
-        case ACCOUNT:
-          authorizations = getUserAccount(userId, resourceName).getAuthorizations();
-          break;
-        case APPLICATION:
-          authorizations = getUserApplication(userId, resourceName).getAuthorizations();
-          break;
-        default:
-          response.sendError(
-              HttpServletResponse.SC_BAD_REQUEST,
-              "Resource type " + resourceType + " does not contain authorizations");
-          return;
+      if (r instanceof Account) {
+        authorizations = getUserAccount(userId, resourceName).getAuthorizations();
+      } else if (r instanceof Application) {
+        authorizations = getUserApplication(userId, resourceName).getAuthorizations();
+      } else {
+        response.sendError(
+            HttpServletResponse.SC_BAD_REQUEST,
+            "Resource type " + resourceType + " does not contain authorizations");
+        return;
       }
     } catch (NotFoundException nfe) {
       // Ignore. Will return 404 below.

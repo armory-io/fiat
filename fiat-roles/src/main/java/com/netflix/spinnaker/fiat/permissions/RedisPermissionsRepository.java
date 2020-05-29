@@ -27,6 +27,7 @@ import com.netflix.spinnaker.fiat.config.UnrestrictedResourceConfig;
 import com.netflix.spinnaker.fiat.model.UserPermission;
 import com.netflix.spinnaker.fiat.model.resources.Resource;
 import com.netflix.spinnaker.fiat.model.resources.ResourceType;
+import com.netflix.spinnaker.fiat.model.resources.ResourceTypeRegistry;
 import com.netflix.spinnaker.fiat.model.resources.Role;
 import com.netflix.spinnaker.kork.jedis.RedisClientDelegate;
 import java.util.*;
@@ -72,6 +73,8 @@ public class RedisPermissionsRepository implements PermissionsRepository {
 
   private final String prefix;
 
+  @Autowired ResourceTypeRegistry resourceTypeRegistry;
+
   @Autowired
   public RedisPermissionsRepository(
       ObjectMapper objectMapper,
@@ -84,8 +87,8 @@ public class RedisPermissionsRepository implements PermissionsRepository {
 
   @Override
   public RedisPermissionsRepository put(@NonNull UserPermission permission) {
-    Map<ResourceType, Map<String, String>> resourceTypeToRedisValue =
-        new HashMap<>(ResourceType.values().length);
+    Map<String, Map<String, String>> resourceTypeToRedisValue =
+        new HashMap<>(resourceTypeRegistry.getRegisteredResourceTypes().size());
 
     permission
         .getAllResources()
@@ -354,6 +357,10 @@ public class RedisPermissionsRepository implements PermissionsRepository {
   private String userKey(String userId, ResourceType r) {
     return String.format("%s:%s:%s:%s", prefix, KEY_PERMISSIONS, userId, r.keySuffix());
   }
+
+  //  private String userKey(String userId, String resourceType) {
+  //    return String.format("%s:%s:%s:%s", prefix, KEY_PERMISSIONS, userId, resourceType + "s");
+  //  }
 
   private String adminKey() {
     return String.format("%s:%s:%s", prefix, KEY_PERMISSIONS, KEY_ADMIN);

@@ -22,11 +22,23 @@ import java.util.Set;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import org.springframework.stereotype.Component;
 
 @Data
+@Component
 @EqualsAndHashCode(callSuper = false)
 public class Account extends BaseAccessControlled<Account> implements Viewable {
-  final ResourceType resourceType = ResourceType.ACCOUNT;
+  //  final ResourceType resourceType = ResourceType.ACCOUNT;
+  public static final String RESOURCE_TYPE = "ACCOUNT";
+
+  @Override
+  public String getResourceType() {
+    return RESOURCE_TYPE;
+  }
+
+  public String keySuffix() {
+    return getResourceType().toLowerCase() + "s";
+  }
 
   private String name;
   private String cloudProvider;

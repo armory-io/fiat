@@ -22,14 +22,27 @@ import javax.annotation.Nonnull;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 @Data
+@Component
 @EqualsAndHashCode(of = "name")
 @NoArgsConstructor
 public class Role implements Resource, Viewable {
 
-  private final ResourceType resourceType = ResourceType.ROLE;
+  //  private final ResourceType resourceType = ResourceType.ROLE;
+  public static final String RESOURCE_TYPE = "ROLE";
+
+  @Override
+  public String getResourceType() {
+    return RESOURCE_TYPE;
+  }
+
+  public String keySuffix() {
+    return getResourceType().toLowerCase() + "s";
+  }
+
   private String name;
 
   public enum Source {

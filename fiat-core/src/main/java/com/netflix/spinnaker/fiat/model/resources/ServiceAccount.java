@@ -26,12 +26,24 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 import lombok.val;
+import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 @Data
+@Component
 @EqualsAndHashCode(callSuper = false)
 public class ServiceAccount implements Resource, Viewable {
-  private final ResourceType resourceType = ResourceType.SERVICE_ACCOUNT;
+  //  private final ResourceType resourceType = ResourceType.SERVICE_ACCOUNT;
+  public static final String RESOURCE_TYPE = "SERVICE_ACCOUNT";
+
+  @Override
+  public String getResourceType() {
+    return RESOURCE_TYPE;
+  }
+
+  public String keySuffix() {
+    return getResourceType().toLowerCase() + "s";
+  }
 
   private String name;
   private List<String> memberOf = new ArrayList<>();

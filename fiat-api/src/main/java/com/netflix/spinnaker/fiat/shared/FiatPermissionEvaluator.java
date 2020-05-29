@@ -25,6 +25,7 @@ import com.netflix.spinnaker.fiat.model.UserPermission;
 import com.netflix.spinnaker.fiat.model.resources.Account;
 import com.netflix.spinnaker.fiat.model.resources.Authorizable;
 import com.netflix.spinnaker.fiat.model.resources.ResourceType;
+import com.netflix.spinnaker.fiat.model.resources.ResourceTypeRegistry;
 import com.netflix.spinnaker.kork.exceptions.IntegrationException;
 import com.netflix.spinnaker.kork.telemetry.caffeine.CaffeineStatsCounter;
 import com.netflix.spinnaker.security.AuthenticatedRequest;
@@ -69,6 +70,8 @@ public class FiatPermissionEvaluator implements PermissionEvaluator {
   private final Id getPermissionCounterId;
 
   private final RetryHandler retryHandler;
+
+  @Autowired private ResourceTypeRegistry resourceTypeRegistry;
 
   interface RetryHandler {
     default <T> T retry(String description, Callable<T> callable) throws Exception {
@@ -206,10 +209,12 @@ public class FiatPermissionEvaluator implements PermissionEvaluator {
     }
 
     ResourceType r = ResourceType.parse(resourceType);
+    //        Resource r = resourceTypeRegistry.parse(resourceType);
     Authorization a = null;
 
     // Service accounts don't have read/write authorizations.
     if (r != ResourceType.SERVICE_ACCOUNT) {
+      //          if (!(r instanceof ServiceAccount)) {
       a = Authorization.valueOf(authorization.toString());
     }
 
@@ -219,6 +224,7 @@ public class FiatPermissionEvaluator implements PermissionEvaluator {
     }
 
     if (r == ResourceType.APPLICATION && StringUtils.isNotEmpty(resourceName.toString())) {
+      //          if (r instanceof Application && StringUtils.isNotEmpty(resourceName.toString())) {
       resourceName = resourceName.toString();
     }
 

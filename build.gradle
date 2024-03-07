@@ -15,18 +15,49 @@
  */
 
 plugins {
+  id "com.jfrog.artifactory" version "5.+"
   id 'io.spinnaker.project' version "$spinnakerGradleVersion" apply false
   id "org.jetbrains.kotlin.jvm" version "$kotlinVersion" apply false
   id "org.jetbrains.kotlin.plugin.allopen" version "$kotlinVersion" apply false
 }
 
 allprojects {
+  apply plugin: 'com.jfrog.artifactory'
   apply plugin: 'io.spinnaker.project'
 }
+artifactory {
+  contextUrl = "https://armory.jfrog.io/armory"
+  //The base Artifactory URL if not overridden by the publisher/resolver
+  publish {
+    repository {
+      repoKey = "armory-gradle-local"
+      username = "${artifactory_user}"
+      password = "${artifactory_password}"
+    }
+    defaults {
+      publications('ALL_PUBLICATIONS')
+      publishPom = true // Publish generated POM files to Artifactory (true by default)
+    }
+
+  }
+
+  clientConfig.info.setBuildNumber(getProperties().get("JFROG_CLI_BUILD_NUMBER", project.getVersion()).toString())
+
+}
+artifactoryPublish.skip=true
 
 subprojects {
+  apply plugin: 'maven-publish'
   group = "io.spinnaker.fiat"
-
+  repositories {
+    maven {
+      url 'https://armory.jfrog.io/armory/armory-gradle-local'
+      credentials {
+        username = "${artifactory_user}"
+        password = "${artifactory_password}"
+      }
+    }
+  }
   if ([korkVersion].find { it.endsWith("-SNAPSHOT") }) {
     repositories {
       mavenLocal()

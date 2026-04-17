@@ -18,6 +18,7 @@ package com.netflix.spinnaker.fiat.permissions;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.ImmutableList;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.netflix.spinnaker.fiat.config.AccountManagerConfig;
 import com.netflix.spinnaker.fiat.config.FiatAdminConfig;
 import com.netflix.spinnaker.fiat.config.UnrestrictedResourceConfig;
@@ -36,13 +37,19 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import javax.annotation.PostConstruct;
+import javax.annotation.PreDestroy;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -55,6 +62,11 @@ public class DefaultPermissionsResolver implements PermissionsResolver {
   private final FiatAdminConfig fiatAdminConfig;
   private final AccountManagerConfig accountManagerConfig;
   private final ObjectMapper mapper;
+
+  @Value("${fiat.permissions-resolver.parallel-threads:0}")
+  private int parallelThreads;
+
+  private ExecutorService resolverExecutor;
 
   @Autowired
   public DefaultPermissionsResolver(
@@ -70,6 +82,28 @@ public class DefaultPermissionsResolver implements PermissionsResolver {
     this.fiatAdminConfig = fiatAdminConfig;
     this.accountManagerConfig = accountManagerConfig;
     this.mapper = mapper;
+  }
+
+  @PostConstruct
+  public void init() {
+    if (parallelThreads > 1) {
+      resolverExecutor = Executors.newFixedThreadPool(
+          parallelThreads,
+          new ThreadFactoryBuilder()
+              .setNameFormat("permissions-resolver-%d")
+              .setDaemon(true)
+              .build());
+      log.info("Initialized parallel permissions resolver with {} threads", parallelThreads);
+    } else {
+      log.info("Parallel permissions resolver using parallel stream (parallelThreads={})", parallelThreads);
+    }
+  }
+
+  @PreDestroy
+  public void shutdown() {
+    if (resolverExecutor != null) {
+      resolverExecutor.shutdown();
+    }
   }
 
   @Override
@@ -206,21 +240,46 @@ public class DefaultPermissionsResolver implements PermissionsResolver {
   @Override
   public Map<String, UserPermission> resolveResources(
       @NonNull Map<String, Collection<Role>> userToRoles) {
-    return userToRoles.entrySet().stream()
-        .map(
-            entry -> {
-              final String userId = entry.getKey();
-              final Set<Role> userRoles = new HashSet<>(entry.getValue());
-              final boolean isAdmin = hasAdminRole(userRoles);
+    
+    log.info("Resolving resources for {} users with {} parallel threads", 
+        userToRoles.size(), parallelThreads);
+    
+    if (parallelThreads > 1 && resolverExecutor != null) {
+      // Use configurable thread pool for parallel resolution
+      return resolveResourcesWithExecutor(userToRoles);
+    }
+    
+    // Default: use parallel stream (simpler, uses ForkJoinPool)
+    return userToRoles.entrySet().parallelStream()
+        .map(this::resolveUserPermission)
+        .collect(Collectors.toConcurrentMap(UserPermission::getId, Function.identity()));
+  }
 
-              return new UserPermission()
-                  .setId(userId)
-                  .setRoles(userRoles)
-                  .setAdmin(isAdmin)
-                  .setAccountManager(hasAccountManagerRole(userRoles))
-                  .addResources(getResources(userId, userRoles, isAdmin));
-            })
+  private Map<String, UserPermission> resolveResourcesWithExecutor(
+      Map<String, Collection<Role>> userToRoles) {
+    
+    List<CompletableFuture<UserPermission>> futures = userToRoles.entrySet().stream()
+        .map(entry -> CompletableFuture.supplyAsync(
+            () -> resolveUserPermission(entry), 
+            resolverExecutor))
+        .collect(Collectors.toList());
+    
+    return futures.stream()
+        .map(CompletableFuture::join)
         .collect(Collectors.toMap(UserPermission::getId, Function.identity()));
+  }
+
+  private UserPermission resolveUserPermission(Map.Entry<String, Collection<Role>> entry) {
+    final String userId = entry.getKey();
+    final Set<Role> userRoles = new HashSet<>(entry.getValue());
+    final boolean isAdmin = hasAdminRole(userRoles);
+
+    return new UserPermission()
+        .setId(userId)
+        .setRoles(userRoles)
+        .setAdmin(isAdmin)
+        .setAccountManager(hasAccountManagerRole(userRoles))
+        .addResources(getResources(userId, userRoles, isAdmin));
   }
 
   private Set<Resource> getResources(String userId, Set<Role> userRoles, boolean isAdmin) {

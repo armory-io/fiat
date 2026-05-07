@@ -1,0 +1,39 @@
+fiat-web/src/main/java/com/netflix/spinnaker/config/WebConfigOverrides.java
+  human 1-43
+---
+{
+  "attestations": [
+    {
+      "entries": [
+        {
+          "accepted_lines": 43,
+          "added_lines": 43,
+          "deleted_lines": 0,
+          "hash": "human",
+          "lines": "1-43",
+          "overridden_lines": 0
+        }
+      ],
+      "file": "fiat-web/src/main/java/com/netflix/spinnaker/config/WebConfigOverrides.java"
+    }
+  ],
+  "base_commit_sha": "6c46d68517b6e8ae1c92bdf4279fcad0106a0807",
+  "branch": "fixcve-2026-22732",
+  "commit_sha": "21fbce850145e0eb8d27b9ca3484fd519743fba5",
+  "commit_time": "2026-05-07T16:30:43-05:00",
+  "commit_type": "direct_commit",
+  "git_ai_version": "1.4.2",
+  "prompts": {
+    "human": {
+      "accepted_lines": 43,
+      "agent_id": null,
+      "human_author": "Jason McIntosh <jason.mcintosh@harness.io>",
+      "messages": [],
+      "overriden_lines": 0,
+      "total_additions": 43,
+      "total_deletions": 0
+    }
+  },
+  "repo": "git@github.com:armory-io/fiat.git",
+  "schema_version": "authorship/3.0.0"
+}

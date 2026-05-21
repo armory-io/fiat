@@ -66,6 +66,9 @@ public class DefaultPermissionsResolver implements PermissionsResolver {
   @Value("${fiat.permissions-resolver.parallel-threads:0}")
   private int parallelThreads;
 
+  @Value("${fiat.permissions-resolver.batch-size:500}")
+  private int batchSize;
+
   private ExecutorService resolverExecutor;
 
   @Autowired
@@ -87,15 +90,20 @@ public class DefaultPermissionsResolver implements PermissionsResolver {
   @PostConstruct
   public void init() {
     if (parallelThreads > 1) {
-      resolverExecutor = Executors.newFixedThreadPool(
+      resolverExecutor =
+          Executors.newFixedThreadPool(
+              parallelThreads,
+              new ThreadFactoryBuilder()
+                  .setNameFormat("permissions-resolver-%d")
+                  .setDaemon(true)
+                  .build());
+      log.info(
+          "Initialized parallel permissions resolver with {} threads, batch size {}",
           parallelThreads,
-          new ThreadFactoryBuilder()
-              .setNameFormat("permissions-resolver-%d")
-              .setDaemon(true)
-              .build());
-      log.info("Initialized parallel permissions resolver with {} threads", parallelThreads);
+          batchSize);
     } else {
-      log.info("Parallel permissions resolver using parallel stream (parallelThreads={})", parallelThreads);
+      log.info(
+          "Permissions resolver using sequential processing (parallelThreads={})", parallelThreads);
     }
   }
 
@@ -240,33 +248,58 @@ public class DefaultPermissionsResolver implements PermissionsResolver {
   @Override
   public Map<String, UserPermission> resolveResources(
       @NonNull Map<String, Collection<Role>> userToRoles) {
-    
-    log.info("Resolving resources for {} users with {} parallel threads", 
-        userToRoles.size(), parallelThreads);
-    
+
+    log.info(
+        "Resolving resources for {} users with {} parallel threads",
+        userToRoles.size(),
+        parallelThreads);
+
     if (parallelThreads > 1 && resolverExecutor != null) {
-      // Use configurable thread pool for parallel resolution
       return resolveResourcesWithExecutor(userToRoles);
     }
-    
-    // Default: use parallel stream (simpler, uses ForkJoinPool)
-    return userToRoles.entrySet().parallelStream()
+
+    // Default: sequential processing to avoid memory explosion from
+    // concurrent allocation of filtered resource sets per user
+    return userToRoles.entrySet().stream()
         .map(this::resolveUserPermission)
-        .collect(Collectors.toConcurrentMap(UserPermission::getId, Function.identity()));
+        .collect(Collectors.toMap(UserPermission::getId, Function.identity()));
   }
 
   private Map<String, UserPermission> resolveResourcesWithExecutor(
       Map<String, Collection<Role>> userToRoles) {
-    
-    List<CompletableFuture<UserPermission>> futures = userToRoles.entrySet().stream()
-        .map(entry -> CompletableFuture.supplyAsync(
-            () -> resolveUserPermission(entry), 
-            resolverExecutor))
-        .collect(Collectors.toList());
-    
-    return futures.stream()
-        .map(CompletableFuture::join)
-        .collect(Collectors.toMap(UserPermission::getId, Function.identity()));
+
+    // Pre-warm resource provider caches so parallel threads don't block on HTTP calls
+    for (ResourceProvider<? extends Resource> provider : resourceProviders) {
+      try {
+        provider.getAll();
+      } catch (Exception e) {
+        log.warn(
+            "Failed to pre-warm cache for provider {}: {}",
+            provider.getClass().getSimpleName(),
+            e.getMessage());
+      }
+    }
+
+    Map<String, UserPermission> result = new HashMap<>();
+    List<Map.Entry<String, Collection<Role>>> entries = new ArrayList<>(userToRoles.entrySet());
+    int effectiveBatchSize = Math.max(1, batchSize);
+
+    for (int i = 0; i < entries.size(); i += effectiveBatchSize) {
+      List<Map.Entry<String, Collection<Role>>> batch =
+          entries.subList(i, Math.min(i + effectiveBatchSize, entries.size()));
+
+      List<CompletableFuture<UserPermission>> futures =
+          batch.stream()
+              .map(
+                  entry ->
+                      CompletableFuture.supplyAsync(
+                          () -> resolveUserPermission(entry), resolverExecutor))
+              .collect(Collectors.toList());
+
+      futures.stream().map(CompletableFuture::join).forEach(up -> result.put(up.getId(), up));
+    }
+
+    return result;
   }
 
   private UserPermission resolveUserPermission(Map.Entry<String, Collection<Role>> entry) {

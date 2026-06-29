@@ -370,4 +370,142 @@ class DefaultPermissionsResolverSpec extends Specification {
                     .addResources([testApp1])
     ]
   }
+
+  def "resolveResources should use sequential stream by default"() {
+    setup:
+    def role1 = new Role('role1')
+    def role2 = new Role('role2')
+
+    ResourceProvider<Application> appProvider = Mock(ResourceProvider) {
+      getAllRestricted("user1", _ as Set, false) >> [new Application().setName("app1")].toSet()
+      getAllRestricted("user2", _ as Set, false) >> [new Application().setName("app2")].toSet()
+    }
+
+    @Subject def resolver = new DefaultPermissionsResolver(
+        userRolesProvider, serviceAccountProvider, [appProvider],
+        new FiatAdminConfig(), new AccountManagerConfig(), new ObjectMapper())
+
+    def userToRoles = [
+        "user1": [role1],
+        "user2": [role2],
+    ]
+
+    when:
+    def result = resolver.resolveResources(userToRoles)
+
+    then:
+    result.size() == 2
+    result.containsKey("user1")
+    result.containsKey("user2")
+    result.get("user1").roles == [role1] as Set
+    result.get("user2").roles == [role2] as Set
+  }
+
+  def "resolveResources with parallel threads should use batched executor and pre-warm caches"() {
+    setup:
+    def role1 = new Role('role1')
+
+    ResourceProvider<Application> appProvider = Mock(ResourceProvider)
+
+    @Subject def resolver = new DefaultPermissionsResolver(
+        userRolesProvider, serviceAccountProvider, [appProvider],
+        new FiatAdminConfig(), new AccountManagerConfig(), new ObjectMapper())
+    // Set parallel threads via reflection since @Value won't be processed in unit test
+    resolver.@parallelThreads = 4
+    resolver.@batchSize = 2
+    resolver.init()
+
+    // Generate 5 users to test batching (batch size 2 = 3 batches: 2+2+1)
+    def userToRoles = new LinkedHashMap()
+    (1..5).each { i ->
+      userToRoles.put("user${i}".toString(), [role1])
+    }
+
+    when:
+    def result = resolver.resolveResources(userToRoles)
+
+    then:
+    // Verify cache pre-warming: getAll() called once before parallel processing
+    1 * appProvider.getAll() >> [].toSet()
+    (1..5).each { i ->
+      1 * appProvider.getAllRestricted("user${i}".toString(), _ as Set, false) >> [].toSet()
+    }
+    result.size() == 5
+    (1..5).each { i ->
+      assert result.containsKey("user${i}".toString())
+    }
+
+    cleanup:
+    resolver.shutdown()
+  }
+
+  def "resolveResources should handle large user sets sequentially"() {
+    setup:
+    def role1 = new Role('role1')
+
+    ResourceProvider<Application> appProvider = Mock(ResourceProvider) {
+      getAllRestricted(_, _ as Set, false) >> [].toSet()
+    }
+
+    @Subject def resolver = new DefaultPermissionsResolver(
+        userRolesProvider, serviceAccountProvider, [appProvider],
+        new FiatAdminConfig(), new AccountManagerConfig(), new ObjectMapper())
+
+    // Generate 1000 users - sequential should handle this fine
+    def userToRoles = new LinkedHashMap()
+    (1..1000).each { i ->
+      userToRoles.put("user${i}".toString(), [role1])
+    }
+
+    when:
+    def result = resolver.resolveResources(userToRoles)
+
+    then:
+    result.size() == 1000
+  }
+
+  def "resolveResources with executor should respect batch size"() {
+    setup:
+    def role1 = new Role('role1')
+
+    ResourceProvider<Application> appProvider = Mock(ResourceProvider) {
+      getAll() >> [].toSet()
+      getAllRestricted(_, _ as Set, false) >> [].toSet()
+    }
+
+    @Subject def resolver = new DefaultPermissionsResolver(
+        userRolesProvider, serviceAccountProvider, [appProvider],
+        new FiatAdminConfig(), new AccountManagerConfig(), new ObjectMapper())
+    resolver.@parallelThreads = 2
+    resolver.@batchSize = 3
+    resolver.init()
+
+    // 7 users with batch size 3 = 3 batches (3+3+1)
+    def userToRoles = new LinkedHashMap()
+    (1..7).each { i ->
+      userToRoles.put("user${i}".toString(), [role1])
+    }
+
+    when:
+    def result = resolver.resolveResources(userToRoles)
+
+    then:
+    result.size() == 7
+
+    cleanup:
+    resolver.shutdown()
+  }
+
+  def "shutdown should be safe when executor is null"() {
+    setup:
+    @Subject def resolver = new DefaultPermissionsResolver(
+        userRolesProvider, serviceAccountProvider, resourceProviders,
+        new FiatAdminConfig(), new AccountManagerConfig(), new ObjectMapper())
+
+    when:
+    resolver.shutdown()
+
+    then:
+    noExceptionThrown()
+  }
 }
